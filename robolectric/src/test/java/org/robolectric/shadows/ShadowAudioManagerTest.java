@@ -34,6 +34,7 @@ import org.robolectric.annotation.Config;
 
 @RunWith(AndroidJUnit4.class)
 public class ShadowAudioManagerTest {
+  private static final float FAULT_TOLERANCE = 0.00001f;
   private final AudioManager.OnAudioFocusChangeListener listener =
       new AudioManager.OnAudioFocusChangeListener() {
         @Override
@@ -127,6 +128,15 @@ public class ShadowAudioManagerTest {
   }
 
   @Test
+  @Config(minSdk = P)
+  public void getStreamMinVolume_shouldReturnMinVolume() {
+    for (int stream : ShadowAudioManager.ALL_STREAMS) {
+      assertThat(audioManager.getStreamMinVolume(stream))
+          .isEqualTo(ShadowAudioManager.DEFAULT_MIN_VOLUME);
+    }
+  }
+
+  @Test
   public void getStreamMaxVolume_shouldReturnMaxVolume() throws Exception {
     for (int stream : ShadowAudioManager.ALL_STREAMS) {
       switch (stream) {
@@ -173,6 +183,18 @@ public class ShadowAudioManagerTest {
   }
 
   @Test
+  @Config(minSdk = P)
+  public void setStreamMinVolume_shouldSetMinVolumeForAllStreams() {
+    final int newMinVol = 1;
+
+    shadowOf(audioManager).setStreamMinVolume(newMinVol);
+
+    for (int stream : ShadowAudioManager.ALL_STREAMS) {
+      assertThat(audioManager.getStreamMinVolume(stream)).isEqualTo(newMinVol);
+    }
+  }
+
+  @Test
   public void setStreamMaxVolume_shouldSetMaxVolumeForAllStreams() {
     final int newMaxVol = 31;
     shadowOf(audioManager).setStreamMaxVolume(newMaxVol);
@@ -191,11 +213,15 @@ public class ShadowAudioManagerTest {
   }
 
   @Test
-  public void setStreamVolume_shouldNotAllowNegativeValues() {
+  @Config(minSdk = P)
+  public void setStreamVolume_shouldNotExceedMinVolume() {
     final int newVol = -3;
+
     shadowOf(audioManager).setStreamVolume(newVol);
+
     for (int stream : ShadowAudioManager.ALL_STREAMS) {
-      assertThat(audioManager.getStreamVolume(stream)).isEqualTo(0);
+      assertThat(audioManager.getStreamVolume(stream))
+          .isEqualTo(ShadowAudioManager.DEFAULT_MIN_VOLUME);
     }
   }
 
@@ -207,7 +233,7 @@ public class ShadowAudioManagerTest {
       switch (stream) {
         case AudioManager.STREAM_MUSIC:
         case AudioManager.STREAM_DTMF:
-          assertThat(audioManager.getStreamMaxVolume(stream))
+          assertThat(audioManager.getStreamVolume(stream))
               .isEqualTo(ShadowAudioManager.MAX_VOLUME_MUSIC_DTMF);
           break;
 
@@ -216,7 +242,7 @@ public class ShadowAudioManagerTest {
         case AudioManager.STREAM_RING:
         case AudioManager.STREAM_SYSTEM:
         case AudioManager.STREAM_VOICE_CALL:
-          assertThat(audioManager.getStreamMaxVolume(stream))
+          assertThat(audioManager.getStreamVolume(stream))
               .isEqualTo(ShadowAudioManager.DEFAULT_MAX_VOLUME);
           break;
 
@@ -224,6 +250,41 @@ public class ShadowAudioManagerTest {
           throw new Exception("Unexpected audio stream requested.");
       }
     }
+  }
+
+  @Test
+  @Config(minSdk = P)
+  public void getStreamVolumeDb_maxVolume_returnsZero() {
+    float volumeDb =
+        audioManager.getStreamVolumeDb(
+            AudioManager.STREAM_MUSIC,
+            ShadowAudioManager.MAX_VOLUME_MUSIC_DTMF,
+            /* deviceType= */ 0);
+
+    assertThat(volumeDb).isWithin(FAULT_TOLERANCE).of(0);
+  }
+
+  @Test
+  @Config(minSdk = P)
+  public void getStreamVolumeDb_minVolume_returnsNegativeInf() {
+    float volumeDb =
+        audioManager.getStreamVolumeDb(
+            AudioManager.STREAM_MUSIC, ShadowAudioManager.DEFAULT_MIN_VOLUME, /* deviceType= */ 0);
+
+    assertThat(volumeDb).isNegativeInfinity();
+  }
+
+  @Test
+  @Config(minSdk = P)
+  public void getStreamVolumeDb_mediumVolume_returnsNegativeValue() {
+    int midVolume =
+        (ShadowAudioManager.DEFAULT_MAX_VOLUME + ShadowAudioManager.DEFAULT_MIN_VOLUME) / 2;
+
+    float volumeDb =
+        audioManager.getStreamVolumeDb(AudioManager.STREAM_MUSIC, midVolume, /* deviceType= */ 0);
+
+    assertThat(volumeDb).isLessThan(0);
+    assertThat(volumeDb).isGreaterThan(Float.NEGATIVE_INFINITY);
   }
 
   @Test
